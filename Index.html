@@ -593,8 +593,75 @@ function renderSidebar() {
         </div>
         <button class="btn-ghost" style="width:100%;justify-content:center" onclick="loadScenarioList()">${icon("folder",{size:13})} Muat dari Google Sheet</button>
         <div id="scenarioList" style="margin-top:10px"></div>
+        <div id="syncBox" style="margin-top:12px"></div>
       </div>
     </div>`;
+  renderSyncBox();
+}
+
+/* ---------------- SYNC SETTINGS (Web App URL + token, disimpan di localStorage) ---------------- */
+function getSyncConfig() {
+  try {
+    return {
+      url: localStorage.getItem("gxc_gas_url") || "",
+      token: localStorage.getItem("gxc_gas_token") || "",
+    };
+  } catch (e) { return { url: "", token: "" }; }
+}
+function setSyncConfig(url, token) {
+  try {
+    localStorage.setItem("gxc_gas_url", url || "");
+    localStorage.setItem("gxc_gas_token", token || "");
+  } catch (e) { /* localStorage tidak tersedia */ }
+}
+
+function renderSyncBox() {
+  const box = document.getElementById("syncBox");
+  if (!box) return;
+  if (IS_GAS) {
+    // Dijalankan langsung dari Apps Script -> sudah otomatis tersambung ke Sheet, tak perlu setting.
+    box.innerHTML = "";
+    return;
+  }
+  const cfg = getSyncConfig();
+  box.innerHTML = `
+    <div style="padding:10px 11px;border:1px dashed var(--line);border-radius:9px">
+      <div class="toggle-label" style="margin-bottom:8px">${icon("radio",{size:13,color:"var(--steam)"})} Sinkronisasi ke Google Sheet</div>
+      <div class="field-hint" style="margin-bottom:8px">Tool ini di-hosting statis (mis. GitHub Pages) &mdash; tempel URL Web App Apps Script Anda (diakhiri <code>/exec</code>) agar tombol Simpan/Muat di atas menulis ke Google Sheet.</div>
+      <input class="input-inline" id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec" style="width:100%;margin-bottom:6px" value="${cfg.url.replace(/"/g,"&quot;")}">
+      <input class="input-inline" id="gasToken" placeholder="Token API (isi jika diset di Script Properties)" style="width:100%;margin-bottom:8px" value="${cfg.token.replace(/"/g,"&quot;")}">
+      <div class="flex gap-2">
+        <button class="btn-ghost" onclick="saveSyncSettings()">${icon("save",{size:13})} Simpan Koneksi</button>
+        <button class="btn-ghost" onclick="testSyncConnection()">${icon("activity",{size:13})} Tes Koneksi</button>
+      </div>
+      <div id="syncStatus" class="field-hint" style="margin-top:7px">${cfg.url ? "Tersimpan. Klik \"Tes Koneksi\" untuk verifikasi." : "Belum terhubung &mdash; skenario hanya tersimpan di sesi ini."}</div>
+    </div>`;
+}
+
+function saveSyncSettings() {
+  const url = (document.getElementById("gasUrl").value || "").trim();
+  const token = (document.getElementById("gasToken").value || "").trim();
+  setSyncConfig(url, token);
+  showToast(url ? "Koneksi Google Sheet disimpan." : "Koneksi dikosongkan (mode standalone).");
+  renderSyncBox();
+  if (url) testSyncConnection();
+}
+
+async function testSyncConnection() {
+  const status = document.getElementById("syncStatus");
+  const cfg = getSyncConfig();
+  if (!cfg.url) { if (status) status.textContent = "Belum terhubung — skenario hanya tersimpan di sesi ini."; return; }
+  if (status) status.textContent = "Menguji koneksi\u2026";
+  try {
+    const r = await gasCall("ping", {});
+    if (r && r.ok) {
+      if (status) status.textContent = "\u2705 Terhubung ke Google Sheet.";
+    } else {
+      if (status) status.textContent = "\u26A0\uFE0F Gagal: " + (r && r.error ? r.error : "respons tidak dikenali");
+    }
+  } catch (err) {
+    if (status) status.textContent = "\u26A0\uFE0F Gagal terhubung: " + (err && err.message ? err.message : err);
+  }
 }
 
 // segmented / discrete setters used by inline onclick above
@@ -967,9 +1034,15 @@ function renderAllCharts(R) {
   <script>
 /* ==============================================================
    BACKEND SYNC (Google Sheets via Apps Script)
-   Falls back to no-op with a friendly toast when running outside
-   GAS (e.g. opened as a plain static HTML file) so the calculator
-   still works standalone.
+   Dua mode koneksi ke backend yang sama (Code.gs):
+     1) IS_GAS       — dibuka langsung dari URL /exec Apps Script,
+                       pakai google.script.run bawaan (RPC internal).
+     2) REST (fetch) — dibuka dari domain lain (GitHub Pages, dst),
+                       google.script.run TIDAK tersedia di luar sandbox
+                       GAS, jadi kita panggil Web App yang sama lewat
+                       fetch() biasa (doGet/doPost di Code.gs).
+   Kalau REST belum dikonfigurasi (lihat panel "Sinkronisasi ke
+   Google Sheet" di sidebar), tool tetap jalan standalone (in-memory).
    ============================================================== */
 const IS_GAS = typeof google !== "undefined" && !!google.script && !!google.script.run;
 
@@ -985,6 +1058,27 @@ function showToast(msg) {
   t.classList.add("show");
   clearTimeout(showToast._h);
   showToast._h = setTimeout(() => t.classList.remove("show"), 3200);
+}
+
+// Panggil Web App Apps Script via fetch() (mode REST, dipakai saat hosting eksternal).
+// action: "ping" | "list" | "save" | "delete"; params: payload tambahan (mis. {payload:{...}}).
+async function gasCall(action, params) {
+  const cfg = getSyncConfig();
+  if (!cfg.url) throw new Error("URL Web App belum diisi");
+  params = params || {};
+  if (action === "list" || action === "ping") {
+    const qs = new URLSearchParams(Object.assign({ action, token: cfg.token || "" }, params));
+    const res = await fetch(`${cfg.url}?${qs.toString()}`, { method: "GET" });
+    return res.json();
+  }
+  // POST dikirim sebagai text/plain agar tidak memicu CORS preflight (Apps Script tidak
+  // mengimplementasikan handler OPTIONS untuk preflight).
+  const res = await fetch(cfg.url, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(Object.assign({ action, token: cfg.token || "" }, params)),
+  });
+  return res.json();
 }
 
 function saveScenario() {
@@ -1003,29 +1097,54 @@ function saveScenario() {
     },
   };
 
-  if (!IS_GAS) {
-    showToast("Mode standalone: hubungkan ke Google Apps Script untuk menyimpan ke Sheet.");
+  if (IS_GAS) {
+    showToast("Menyimpan ke Google Sheet\u2026");
+    google.script.run
+      .withSuccessHandler(() => { showToast(`Tersimpan: "${name}"`); if (nameEl) nameEl.value = ""; loadScenarioList(); })
+      .withFailureHandler((err) => showToast("Gagal menyimpan: " + (err && err.message ? err.message : err)))
+      .saveScenario(payload);
+    return;
+  }
+
+  const cfg = getSyncConfig();
+  if (!cfg.url) {
+    showToast("Mode standalone: isi panel \"Sinkronisasi ke Google Sheet\" di sidebar untuk menyimpan.");
     return;
   }
   showToast("Menyimpan ke Google Sheet\u2026");
-  google.script.run
-    .withSuccessHandler(() => { showToast(`Tersimpan: "${name}"`); if (nameEl) nameEl.value = ""; loadScenarioList(); })
-    .withFailureHandler((err) => showToast("Gagal menyimpan: " + (err && err.message ? err.message : err)))
-    .saveScenario(payload);
+  gasCall("save", { payload })
+    .then((r) => {
+      if (r && r.ok) { showToast(`Tersimpan: "${name}"`); if (nameEl) nameEl.value = ""; loadScenarioList(); }
+      else showToast("Gagal menyimpan: " + (r && r.error ? r.error : "unknown_error"));
+    })
+    .catch((err) => showToast("Gagal menyimpan: " + (err && err.message ? err.message : err)));
 }
 
 function loadScenarioList() {
   const box = document.getElementById("scenarioList");
   if (!box) return;
-  if (!IS_GAS) {
-    box.innerHTML = `<div class="field-hint">Mode standalone (tidak terhubung ke Apps Script).</div>`;
+
+  if (IS_GAS) {
+    box.innerHTML = `<div class="field-hint">Memuat daftar skenario\u2026</div>`;
+    google.script.run
+      .withSuccessHandler((list) => renderScenarioList(list || []))
+      .withFailureHandler((err) => { box.innerHTML = `<div class="field-hint">Gagal memuat: ${err && err.message ? err.message : err}</div>`; })
+      .listScenarios();
+    return;
+  }
+
+  const cfg = getSyncConfig();
+  if (!cfg.url) {
+    box.innerHTML = `<div class="field-hint">Mode standalone (belum terhubung ke Google Sheet).</div>`;
     return;
   }
   box.innerHTML = `<div class="field-hint">Memuat daftar skenario\u2026</div>`;
-  google.script.run
-    .withSuccessHandler((list) => renderScenarioList(list || []))
-    .withFailureHandler((err) => { box.innerHTML = `<div class="field-hint">Gagal memuat: ${err && err.message ? err.message : err}</div>`; })
-    .listScenarios();
+  gasCall("list", {})
+    .then((r) => {
+      if (r && r.ok) renderScenarioList(r.list || []);
+      else box.innerHTML = `<div class="field-hint">Gagal memuat: ${r && r.error ? r.error : "unknown_error"}</div>`;
+    })
+    .catch((err) => { box.innerHTML = `<div class="field-hint">Gagal memuat: ${err && err.message ? err.message : err}</div>`; });
 }
 
 function renderScenarioList(list) {
