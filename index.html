@@ -626,24 +626,11 @@ function setSyncConfig(url, token) {
 function renderSyncBox() {
   const box = document.getElementById("syncBox");
   if (!box) return;
-  if (IS_GAS) {
-    // Dijalankan langsung dari Apps Script -> sudah otomatis tersambung ke Sheet, tak perlu setting.
-    box.innerHTML = "";
-    return;
-  }
-  const cfg = getSyncConfig();
-  box.innerHTML = `
-    <div style="padding:10px 11px;border:1px dashed var(--line);border-radius:9px">
-      <div class="toggle-label" style="margin-bottom:8px">${icon("radio",{size:13,color:"var(--steam)"})} Sinkronisasi ke Google Sheet</div>
-      <div class="field-hint" style="margin-bottom:8px">Tool ini di-hosting statis (mis. GitHub Pages) &mdash; tempel URL Web App Apps Script Anda (diakhiri <code>/exec</code>) agar tombol Simpan/Muat di atas menulis ke Google Sheet.</div>
-      <input class="input-inline" id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec" style="width:100%;margin-bottom:6px" value="${cfg.url.replace(/"/g,"&quot;")}">
-      <input class="input-inline" id="gasToken" placeholder="Token API (isi jika diset di Script Properties)" style="width:100%;margin-bottom:8px" value="${cfg.token.replace(/"/g,"&quot;")}">
-      <div class="flex gap-2">
-        <button class="btn-ghost" onclick="saveSyncSettings()">${icon("save",{size:13})} Simpan Koneksi</button>
-        <button class="btn-ghost" onclick="testSyncConnection()">${icon("activity",{size:13})} Tes Koneksi</button>
-      </div>
-      <div id="syncStatus" class="field-hint" style="margin-top:7px">${cfg.url ? "Tersimpan. Klik \"Tes Koneksi\" untuk verifikasi." : "Belum terhubung &mdash; skenario hanya tersimpan di sesi ini."}</div>
-    </div>`;
+  // Panel pengaturan sinkronisasi disembunyikan dari tampilan (mengganggu di mobile).
+  // Koneksi tetap aktif secara otomatis lewat DEFAULT_GAS_URL / DEFAULT_GAS_TOKEN di atas.
+  // Untuk mengganti URL/token secara manual, panggil setSyncConfig(url, token) dari console,
+  // atau ubah nilai DEFAULT_GAS_URL / DEFAULT_GAS_TOKEN langsung di kode.
+  box.innerHTML = "";
 }
 
 function saveSyncSettings() {
