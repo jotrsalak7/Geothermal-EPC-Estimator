@@ -600,13 +600,21 @@ function renderSidebar() {
 }
 
 /* ---------------- SYNC SETTINGS (Web App URL + token, disimpan di localStorage) ---------------- */
+// Default koneksi (ditanam langsung agar siapa pun yang buka link ini otomatis
+// terhubung ke Google Sheet, tanpa perlu isi ulang panel sinkronisasi).
+// CATATAN: karena ditanam di HTML, siapa pun yang lihat "View Page Source" bisa
+// melihat nilai ini. Jangan gunakan pola ini kalau repo/link dibagikan publik luas
+// atau kalau token ini juga dipakai untuk melindungi data sensitif.
+const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbz53zg2z6pWwRv3DHnG4b46c7yCefD6ROCcxWau132yOCjcbthwORBRZF6YlCLER0Xi2A/exec";
+const DEFAULT_GAS_TOKEN = "1J10f8AbiGaB1EjEyOXn_WhYO7lq3_vmQ-1t0urOAsdNdZpCJNDF7nLpe";
+
 function getSyncConfig() {
   try {
     return {
-      url: localStorage.getItem("gxc_gas_url") || "",
-      token: localStorage.getItem("gxc_gas_token") || "",
+      url: localStorage.getItem("gxc_gas_url") || DEFAULT_GAS_URL,
+      token: localStorage.getItem("gxc_gas_token") || DEFAULT_GAS_TOKEN,
     };
-  } catch (e) { return { url: "", token: "" }; }
+  } catch (e) { return { url: DEFAULT_GAS_URL, token: DEFAULT_GAS_TOKEN }; }
 }
 function setSyncConfig(url, token) {
   try {

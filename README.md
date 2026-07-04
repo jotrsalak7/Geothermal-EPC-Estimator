@@ -56,6 +56,14 @@ Koneksi ini tersimpan di `localStorage` browser masing-masing pengguna — setia
 
 Request `POST` dikirim dengan `Content-Type: text/plain` (bukan `application/json`) supaya browser tidak mengirim *preflight* `OPTIONS` — Apps Script Web App tidak mengimplementasikan handler untuk itu, jadi kalau pakai `application/json` permintaan akan gagal karena CORS.
 
+## Varian "sudah tertanam" (hardcoded) untuk dibagikan ke tim internal
+
+Kalau Anda memilih menanam URL Web App + `API_TOKEN` langsung di dalam `index.html` (lewat konstanta `DEFAULT_GAS_URL` / `DEFAULT_GAS_TOKEN`) supaya rekan tim tinggal buka link tanpa isi apa pun — itu valid untuk dibagikan terbatas ke tim, TAPI perlu diingat:
+
+- Siapa pun yang buka **View Page Source** di browser bisa melihat URL dan token tersebut.
+- Kalau repo GitHub-nya **publik**, token otomatis ikut publik. Pakai repo **private**, atau terima risikonya kalau memang cuma untuk mencegah spam biasa (bukan melindungi data rahasia).
+- Panel "Sinkronisasi ke Google Sheet" di sidebar tetap bisa dipakai untuk override manual (mis. kalau nanti ganti ke Sheet lain) — nilai yang diisi manual di situ akan menimpa nilai default yang tertanam.
+
 ## Keamanan & batasan yang perlu diketahui
 
 - Kalau **`API_TOKEN` dikosongkan**, siapa pun yang tahu URL Web App bisa menulis (dan membaca) baris skenario ke Sheet Anda. Untuk tool yang dibagikan publik, sebaiknya selalu isi token.
